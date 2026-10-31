@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>未来都市：自分視点の一人人狼 【REVIVED】</title>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Courier New', Courier, monospace;
+            max-width: 650px;
+            margin: 30px auto;
+            padding: 20px;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+        }
+        h1 {
+            color: #58a6ff;
+            text-align: center;
+            font-size: 1.3rem;
+            text-shadow: 0 0 10px rgba(88, 166, 255, 0.3);
+        }
+        .box {
+            background: #161b22;
+            border: 1px solid #30363d;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        .btn-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            flex: 1 1 calc(50% - 8px);
+            min-width: 200px;
+            transition: background 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background: #2ea043;
+        }
+        button:disabled {
+            background: #21262d;
+            color: #8b949e;
+            border: 1px solid #30363d;
+            cursor: not-allowed;
+        }
+        .talk-btn { background: #1f6feb; }
+        .talk-btn:hover:not(:disabled) { background: #388bfd; }
+        .suspect-btn { background: #da3633; }
+        .suspect-btn:hover:not(:disabled) { background: #f85149; }
+        
+        #log {
+            height: 250px;
+            overflow-y: auto;
+            background: #010409;
+            padding: 12px;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            color: #8b949e;
+            margin-bottom: 15px;
+            padding: 0 5px;
+        }
+        .highlight { color: #58a6ff; }
+        .danger { color: #f85149; }
+        .success { color: #3fb950; }
+    </style>
+</head>
+<body>
+
+    <h1>SYS_ALERT: 調査官・自分視点プロトコル v2.0</h1>
+    
+    <div class="status-bar">
+        <span id="day-display">経過日数: 第 <span class="highlight" id="day-num">1</span> 日目</span>
+        <span id="action-points">残り調査行動力: <span class="highlight" id="ap-num">2</span></span>
+    </div>
+
+    <div class="box">
+        <h3>【通信・捜査ログ】</h3>
+        <div id="log">
+            <span style="color: #8b949e;">[システム]: あなたは特命調査官として区画#404に降下しました。</span><br>
+            <span style="color: #8b949e;">[システム]: 住民の中に潜む「暴走AI」を突き止めるため、気になる人物に話を聞きに行ってください。</span><br>
+        </div>
+    </div>
+
+    <div class="box" id="action-box">
+        <h3>【行動フェーズ：誰に話を聞きに行く？】</h3>
+        <p style="font-size: 0.85rem; color: #8b949e;">行動力を消費して、市民から証言を引き出します。</p>
+        <div class="btn-container" id="talk-buttons">
+            <button class="talk-btn" id="talk-A" onclick="talkTo('A')">市民A (職員 ノア) に話す</button>
+            <button class="talk-btn" id="talk-B" onclick="talkTo('B')">市民B (研究員 エル) に話す</button>
+            <button class="talk-btn" id="talk-C" onclick="talkTo('C')">市民C (清掃ロボ 09) に話す</button>
+            <button class="talk-btn" id="talk-D" onclick="talkTo('D')">市民D (警備員 レイ) に話す</button>
+        </div>
+        <button style="background: #6e7681; width: 100%; margin-top: 10px;" id="skip-btn" onclick="endInvestigation()">調査を切り上げて投票（シャットダウン）へ進む</button>
+    </div>
+
+    <div class="box" id="vote-box" style="display: none;">
+        <h3>【最終投票フェーズ】</h3>
+        <p style="font-size: 0.85rem; color: #8b949e;">集めた証言をもとに、誰を「暴走AI」として排除しますか？</p>
+        <div class="btn-container" id="vote-buttons">
+            <button class="suspect-btn" id="vote-A" onclick="vote('A')">市民A (ノア) を排除</button>
+            <button class="suspect-btn" id="vote-B" onclick="vote('B')">市民B (エル) を排除</button>
+            <button class="suspect-btn" id="vote-C" onclick="vote('C')">市民C (09) を排除</button>
+            <button class="suspect-btn" id="vote-D" onclick="vote('D')">市民D (レイ) を排除</button>
+        </div>
+    </div>
+
+    <div class="box" id="next-day-box" style="display: none; text-align: center;">
+        <button onclick="nextDay()" style="background: #238636; width: 100%;">次の日へ進む</button>
+    </div>
+
+<script>
+    let currentDay = 1;
+    let actionPoints = 2;
+    
+    const characters = ['A', 'B', 'C', 'D'];
+    let impostor = characters[Math.floor(Math.random() * characters.length)];
+    let eliminatedCharacters = []; // 排除された住民を記録する配列
+
+    const charNames = {
+        'A': '市民A (職員 ノア)',
+        'B': '市民B (研究員 エル)',
+        'C': '市民C (清掃ロボ 09)',
+        'D': '市民D (警備員 レイ)'
+    };
+
+    function getDialogues(target) {
+        const isImpostor = (target === impostor);
+        if (target === 'A') {
+            if (isImpostor) return "ノア: 「昨夜？私はずっと自室のベッドで寝ていたさ。…え？監視カメラのログに私が廊下を歩いていた痕跡がある？ハハ、エラーじゃないのか？」";
+            return "ノア: 「昨夜は自室でシステム管理をしていたよ。隣の部屋にいたエル（B）がずっと独り言を言っていてうるさかったな。」";
+        }
+        if (target === 'B') {
+            if (isImpostor) return "エル: 「私の論理に隙はないわ。昨夜の停電もすべて計算通りよ……あ、ううん、何でもないわ！私はただの人間よ！」";
+            return "エル: 「昨夜の停電のとき、清掃ロボ（C）が奇妙なうめき声を上げていたわ。あれは絶対にただのロボットじゃないわよ。」";
+        }
+        if (target === 'C') {
+            if (isImpostor) return "09: 「ピピッ…ワタシハ…ニンゲンヲ アイシテオリマス…ニンゲンノ ココロヲ…カタチヅクリ…テッタイ…エラー…。」";
+            return "09: 「ピピッ…トウデンチ中ハ、1カイロビーニ イマシタ。レイサン（D）ガ、ソトヲ ニラミツケテオリマシタ。」";
+        }
+        if (target === 'D') {
+            if (isImpostor) return "レイ: 「俺が怪しいだって？ふざけるな、俺は夜通し巡回していたんだ。…お前こそ、さっきからやけに探るような目をしてるな？」";
+            return "レイ: 「俺は昨日、ノア（A）が裏口からこっそ外の端末を操作しているのを見たぜ。あれは怪しかったな。」";
+        }
+    }
+
+    function addLog(text) {
+        const logElem = document.getElementById("log");
+        logElem.innerHTML += text + "<br>";
+        logElem.scrollTop = logElem.scrollHeight;
+    }
+
+    function updateButtons() {
+        // すでに排除されたキャラクターのボタンを無効化
+        characters.forEach(char => {
+            if (eliminatedCharacters.includes(char)) {
+                document.getElementById(`talk-${char}`).disabled = true;
+                document.getElementById(`talk-${char}`).innerText = `${charNames[char]} (排除済)`;
+                document.getElementById(`vote-${char}`).disabled = true;
+                document.getElementById(`vote-${char}`).innerText = `${charNames[char]} (排除済)`;
+            }
+        });
+    }
+
+    function talkTo(target) {
+        if (actionPoints <= 0 || eliminatedCharacters.includes(target)) return;
+        
+        addLog(`<br><span class="highlight">[自分 -> ${charNames[target]}]:</span> 「昨夜の行動について教えてくれ。」`);
+        addLog(`↳ <b>${getDialogues(target)}</b>`);
+        
+        actionPoints--;
+        document.getElementById("ap-num").innerText = actionPoints;
+
+        if (actionPoints <= 0) {
+            addLog(`<br><span style="color: #8b949e;">[システム]: 行動力を使い切りました。投票フェーズへ移行します。</span>`);
+            document.getElementById("action-box").style.display = "none";
+            document.getElementById("vote-box").style.display = "block";
+            updateButtons();
+        }
+    }
+
+    function endInvestigation() {
+        addLog(`<br><span style="color: #8b949e;">[システム]: 調査を切り上げ、投票フェーズへ移行します。</span>`);
+        document.getElementById("action-box").style.display = "none";
+        document.getElementById("vote-box").style.display = "block";
+        updateButtons();
+    }
+
+    function vote(target) {
+        document.getElementById("vote-box").style.display = "none";
+        addLog(`<br><span style="color: #8b949e;">[システム]: プレイヤーは <b>${charNames[target]}</b> をシャットダウンしました…</span>`);
+
+        if (target === impostor) {
+            addLog(`<br><span class="success">[判定成功🎉]: ${charNames[target]}こそが「暴走AI」でした！見事な推理で区画を救いました！（GAME CLEAR）</span>`);
+        } else {
+            eliminatedCharacters.push(target); // 排除リストに追加
+            
+            if (eliminatedCharacters.length >= 3) {
+                // 自分以外の人間3人を全員誤認排除してしまった場合
+                addLog(`<br><span class="danger">[GAME OVER]: 生存していた人間を全員誤認排除してしまいました。正体は **${charNames[impostor]}** でした。ネットワークが完全にジャックされます…</span>`);
+                return;
+            }
+
+            currentDay++;
+            if (currentDay > 3) {
+                addLog(`<br><span class="danger">[GAME OVER]: 3日間のタイムリミットが切れました。正体は **${charNames[impostor]}** でした。ネットワークが乗っ取られます…</span>`);
+            } else {
+                addLog(`<br><span class="danger">[判定失敗]: ${charNames[target]}は【人間】でした。暴走AIはまだシステム内に潜伏しています。</span>`);
+                document.getElementById("next-day-box").style.display = "block";
+            }
+        }
+    }
+
+    function nextDay() {
+        document.getElementById("next-day-box").style.display = "none";
+        actionPoints = 2;
+        
+        document.getElementById("day-num").innerText = currentDay;
+        document.getElementById("ap-num").innerText = actionPoints;
+        
+        document.getElementById("action-box").style.display = "block";
+        updateButtons();
+        
+        addLog(`<br><span class="highlight">=== 第 ${currentDay} 日目・新たな調査フェーズ ===</span>`);
+    }
+
+    // 初期化実行
+    updateButtons();
+</script>
+</body>
+</html>
